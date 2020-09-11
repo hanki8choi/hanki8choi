@@ -7,16 +7,15 @@ import FinanceDataReader as fdr
 class TickerMng:
     def __init__(self):
         self.mode = 0  #
-        self.offense = []
-        self.defense = []
-        self.canary = []
-        self.offense_df = pd.DataFrame()
-        self.defense_df = pd.DataFrame()
-        self.canary_df = pd.DataFrame()
+        self.offenseNames = []
+        self.defenseNames = []
+        self.canaryNames = []
+        self.offense_dfs = [pd.DataFrame()]
+        self.defense_dfs = [pd.DataFrame()]
+        self.canary_dfs = [pd.DataFrame()]
         
-        #self.typeName = ['offense', 'defense', 'canary']
-        self.typeDic = {'offense':self.offense, 'defense':self.defense, 'canary':self.canary}
-        self.tickers_df = {'offense':self.offense_df, 'defense':self.defense}, 'canary':self.canary_df}
+        self.namesGroup = {'offense':self.offenseNames, 'defense':self.defenseNames, 'canary':self.canaryNames}
+        self.dfsGroup = {'offense':self.offense_dfs, 'defense':self.defense_dfs, 'canary':self.canary_dfs}
 
     def make_ticker2dataframe(self, type, ticker_name):
         mon = pd.read_csv('data/M_%s.csv' % (ticker_name))
@@ -28,61 +27,23 @@ class TickerMng:
         for idx in range( 0, len(mon)-1 ): 
             profit = mon['Close'][idx+1] - mon['Close'][idx]
             mon['profit'] = profit
-        
-        #mon['ticker_name'] = ticker_name
-        
-        df = self.tickers_df[type]
-        df[ticker_name] = mon
+            
+        dfs = self.dfsGroup[type]
+        dfs[ticker_name] = mon
         
         
-    def load(self):
-        for key, val in self.typeDic.items():
+    def load_type_list(self):
+        for key, val in self.namesGrouop.items():
             val.clear()
             fd_list = open('data/Z_%s_list.csv' % (key), 'r', encoding='utf-8')
             rdlist = csv.reader(fd_list)
             for line in rdlist:
                 ticker_name = line[0]
-                val.append(ticker_name)
-                make_ticker2dataframe(ticker_name)
-                
+                val.append(ticker_name)                
             fd_list.close()
 
-        for key, val in self.typeDic.items():
-            for ticker_name in val:
-                df = pdr.get_data_stooq(ticker_name)
-                df.to_csv( 'data/O_%s.csv'%(ticker_name) )
-                mon_df = df['Close'].resample('M').first()
-                mon_df.to_csv('data/M_%s.csv'%(ticker_name) )
-
-    def select_tickers(self, day, number )
-        oneday_df = pd.DataFrame()
-        
-        for key, val in self.offense_df.items()
-            my_data = list(val.iloc[0]) + [key] 
-            my_col = list(val.iloc[0].index) + ['ticker_name']
-            
-            tmp = pd.DataFrame( data=[my_data], columns=my_col )
-            oneday_df = oneday_df.append( tmp )
-        
-        oneday_df = oneday_df.set_index('ticker_name', drop=False )
-        oneday_df = oneday_df.sort_values(by='score', ascending=False)
-        
-        result = []
-        for idx in range(0,number)
-            result.append( oneday_df.iloc[idx]['ticker_name'] )
-         
-        return result
-
-    def save(self):
-        for key, val in self.typeDic.items():
-            f = open( 'data/Z_%s_list.csv'%(key) , 'w', encoding='utf-8', newline='')
-            wr = csv.writer(f)
-            for name in val:
-                wr.writerow( [name] )
-            f.close()
-
     def download_stooq(self):
-        for key, val in self.typeDic.items():
+        for key, val in self.namesGroup.items():
             for ticker_name in val:
                 df = pdr.get_data_stooq(ticker_name)
                 df.to_csv( 'data/O_%s.csv'%(ticker_name) )
@@ -91,11 +52,64 @@ class TickerMng:
 
 
     def download_fdr(self):
-        for key, val in self.typeDic.items():
+        for key, val in self.namesGroup.items():
             for ticker_name in val:
                 #2019년에서 현재까지
                 fdr = fdr.DataReader(ticker_name, '2019' )
                 df.to_csv( 'data/O_%s.csv'%(ticker_name) )
                 mon_df = df['Close'].resample('M').first()
                 mon_df.to_csv('data/M_%s.csv'%(ticker_name) )
+
+
+    def load_dataframe(self):
+        for key, val in self.namesGroup.items():
+            for ticker_name in val:
+                make_ticker2dataframe(key, ticker_name)
+
+    def is_risky_canary(self, date_idx )
+        for val in self.canary_dfs:
+            if val['score'].iloc[date_idx] <= 0 :
+                return True
+        return False
+        
+    def select_defense(self, date_idx )
+        names = sort_dfs( self.defense_dfs, 1 )
+        
+        print( self.defens_dfs[ names[0] ].iloc[date_idx] )
+    
+    def select_offense(self, date_idx )
+        names = sort_dfs( self.offense_cfs, 2 )
+        
+        print("-----------")
+        print( self.offense_dfs[ names[0] ].iloc[date_idx] )
+        print("-----------")
+        print( self.offense_dfs[ names[1] ].iloc[date_idx] )
+        
+        
+    def sort_dfs(self, dfs, date_idx, count )
+        oneday_df = pd.DataFrame()
+        
+        for key, val in dfs.items()
+            my_data = list(val.iloc[date_idx]) + [key] 
+            my_col = list(val.iloc[date_idx].index) + ['ticker_name']
+            
+            tmp = pd.DataFrame( data=[my_data], columns=my_col )
+            oneday_df = oneday_df.append( tmp )
+        
+        oneday_df = oneday_df.set_index('ticker_name', drop=False )
+        oneday_df = oneday_df.sort_values(by='score', ascending=False)
+        
+        result = []
+        for idx in range(0,count)
+            result.append( oneday_df.iloc[idx]['ticker_name'] )
+         
+        return result
+
+    def save_type_list(self):
+        for key, val in self.namesGrouop.items():
+            f = open( 'data/Z_%s_list.csv'%(key) , 'w', encoding='utf-8', newline='')
+            wr = csv.writer(f)
+            for name in val:
+                wr.writerow( [name] )
+            f.close()
 

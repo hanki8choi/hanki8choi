@@ -9,10 +9,17 @@ tickers = TickerMng()
 #mng.defense = ['SHV.US', 'IEF.US', 'UST.US']
 #mng.canary = ['BND.US', 'VWO.US']
 
-tickers.load()
-#tickers.save()
-tickers.download_stooq()
+tickers.load_type_list()
+#tickers.download_stooq()
+#tickers.download_fdr()
+tickers.load_dataframe()
 
+for date_idx in range(0,10):
+    if tickers.is_risky_canary(date_idx) :
+        tickers.select_defense(date_idx)
+    else :
+        tickers.select_offense(date_idx)
+        
 exit(0)
 # Download후에 저장하는방식
 # 값을 파일별로 분리
