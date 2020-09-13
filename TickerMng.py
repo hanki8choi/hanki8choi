@@ -1,6 +1,8 @@
 import pandas as pd
 import pandas_datareader as pdr
 import csv
+import matplotlib.pyplot as plt
+import numpy as np
 
 
 class TickerMng:
@@ -19,23 +21,22 @@ class TickerMng:
         self.groupsNames = {'offense': self.offenseNames, 'defense': self.defenseNames, 'canary': self.canaryNames}
         self.groups_dfs = {'offense': self.offense_dfs, 'defense': self.defense_dfs, 'canary': self.canary_dfs}
 
-    def make_ticker2dataframe(self, group_name, ticker_name):
-        mon = pd.read_csv('data/M_%s.csv' % ticker_name , sep='\t' )
+    def make_dataframe(self, group_name, ticker_name):
+        mon = pd.read_csv('data/M_%s.csv' % ticker_name, sep='\t')
         mon = mon.set_index('Date', drop=True)
 
-        score_df = mon.pct_change(periods=1) * 12 + mon.pct_change(periods=3) * 4 + \
-                   mon.pct_change(periods=6) * 2 + mon.pct_change(periods=12)
+        score_df = mon.pct_change(periods=1) * 12 + mon.pct_change(periods=3) * 4 + mon.pct_change(
+            periods=6) * 2 + mon.pct_change(periods=12)
 
         score_df.columns = ['Score']
 
         profit_df = mon.pct_change(periods=1)
         profit_df.columns = ['Profit']
 
-        mon = pd.concat([mon, score_df['Score']] , axis=1 )
+        mon = pd.concat([mon, score_df['Score']], axis=1)
         mon = pd.concat([mon, profit_df['Profit']], axis=1)
 
         self.groups_dfs[group_name][ticker_name] = mon
-
 
     def load_type_list(self):
         for key, val in self.groupsNames.items():
@@ -51,14 +52,15 @@ class TickerMng:
         for key, val in self.groupsNames.items():
             for ticker_name in val:
                 df = pdr.get_data_stooq(ticker_name)
-                df.to_csv('data/O_%s.csv' % ticker_name, sep='\t' )
-                mon_df = df['Close'].resample('M').first().to_frame('Close')
-                mon_df.to_csv('data/M_%s.csv' % ticker_name, sep='\t' )
+                df.to_csv('data/O_%s.csv' % ticker_name, sep='\t')
+                # mon_df = df['Close'].resample('M').first().to_frame('Close')  # first() == 매달 1일기준
+                mon_df = df['Close'].resample('M').last().to_frame('Close')
+                mon_df.to_csv('data/M_%s.csv' % ticker_name, sep='\t')
 
     def load_dataframe(self):
         for key, val in self.groupsNames.items():
             for ticker_name in val:
-                self.make_ticker2dataframe(key, ticker_name)
+                self.make_dataframe(key, ticker_name)
 
     def is_risky_canary(self, date_idx):
         for key, val in self.canary_dfs.items():
@@ -68,24 +70,25 @@ class TickerMng:
 
     def select_defense(self, date_idx):
         names = self.sort_dfs(self.defense_dfs, date_idx, 1)
-
-        print('[%s]   defense : [%s] -> [%lf]' % (
-            self.defense_dfs[names[0]].index[date_idx],
-            names[0],
-            self.defense_dfs[names[0]]['Profit'].iloc[date_idx+1] )  )
-
-
-        #print(self.defense_dfs[names[0]].iloc[date_idx])
+        return {'Date': self.defense_dfs[names[0]].index[date_idx],
+                'Ticker': names[0],
+                'Profit': self.defense_dfs[names[0]]['Profit'].iloc[date_idx + 1]
+                }
 
     def select_offense(self, date_idx):
         names = self.sort_dfs(self.offense_dfs, date_idx, 2)
+        arr = np.array([
+            self.offense_dfs[names[0]]['Profit'].iloc[date_idx + 1],
+            self.offense_dfs[names[1]]['Profit'].iloc[date_idx + 1]])
+        profit_avg = np.mean(arr)
 
-        print('[%s]   offense : [%s %s] -> [%lf %lf]' % (
-            self.offense_dfs[names[0]].index[date_idx],
-            names[0], names[1],
-            self.offense_dfs[names[0]]['Profit'].iloc[date_idx+1] , self.offense_dfs[names[1]]['Profit'].iloc[date_idx+1] )  )
+        return {'Date': self.offense_dfs[names[0]].index[date_idx],
+                'Ticker': "%s,%s" % (names[0], names[1]),
+                'Profit': profit_avg
+                }
 
-    def sort_dfs(self, dfs, date_idx, count):
+    @staticmethod
+    def sort_dfs(dfs, date_idx, count):
         oneday_df = pd.DataFrame()
 
         for key, val in dfs.items():
@@ -103,6 +106,33 @@ class TickerMng:
             result.append(oneday_df.iloc[idx]['ticker_name'])
 
         return result
+
+    def show_daa_profit(self):
+
+        report_df = pd.DataFrame()
+        cumulative_returns = 1.0
+
+        for date_idx in range(12, len(self.offense_dfs['SPY.US'].index) - 1):
+            if self.is_risky_canary(date_idx):
+                result_dic = self.select_defense(date_idx)
+                result_dic['Risky'] = 1
+            else:
+                result_dic = self.select_offense(date_idx)
+                result_dic['Risky'] = 0
+
+            cumulative_returns = cumulative_returns * (1 + result_dic['Profit'])
+            result_dic['CumulativeReturns'] = cumulative_returns
+
+            report_df = report_df.append(result_dic, ignore_index=True)
+
+        report_df = report_df.set_index('Date', drop=True)
+
+        print(report_df[['Profit', 'CumulativeReturns']])
+
+        report_df['Profit'].plot(legend=True)
+        report_df['CumulativeReturns'].plot(legend=True)
+        # report_df[['Profit', 'CumulativeReturns']].plot(subplots=True, sharex=True, legend=True)
+        plt.show()
 
     def save_type_list(self):
         for key, val in self.groupsNames.items():
